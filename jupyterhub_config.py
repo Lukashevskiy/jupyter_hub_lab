@@ -56,6 +56,29 @@ c.Spawner.environment = {
 }
 
 
+def _fix_tree_permissions(path: Path, uid: int, gid: int, log):
+    """Make user home writable for single-user server uid/gid."""
+    os.chown(path, uid, gid)
+    os.chmod(path, 0o775)
+
+    for root, dirs, files in os.walk(path):
+        for d in dirs:
+            p = os.path.join(root, d)
+            try:
+                os.chown(p, uid, gid)
+                os.chmod(p, 0o775)
+            except Exception as e:
+                log.warning(f"Failed to set permissions on dir {p}: {e}")
+
+        for f in files:
+            p = os.path.join(root, f)
+            try:
+                os.chown(p, uid, gid)
+                os.chmod(p, 0o664)
+            except Exception as e:
+                log.warning(f"Failed to set permissions on file {p}: {e}")
+
+
 def pre_spawn_hook(spawner):
     username = spawner.user.name
     user_home = host_home / username
@@ -64,8 +87,7 @@ def pre_spawn_hook(spawner):
     host_opt_packages.mkdir(parents=True, exist_ok=True)
 
     # Ensure singleuser container user (uid=1000) can write to mounted folders.
-    os.chown(user_home, 1000, 1000)
-    os.chmod(user_home, 0o775)
+    _fix_tree_permissions(user_home, 1000, 1000, spawner.log)
     os.chmod(host_opt_packages, 0o777)
 
 
