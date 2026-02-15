@@ -1,66 +1,75 @@
 import os
-import subprocess
+from pathlib import Path
+
 import dockerspawner
+from docker.types import DeviceRequest
 from nativeauthenticator import NativeAuthenticator
 
-# Аутентификация
+c = get_config()
+
+# Authentication
 c.JupyterHub.authenticator_class = NativeAuthenticator
 c.NativeAuthenticator.open_signup = True
 c.NativeAuthenticator.enable_signup = True
-c.Authenticator.admin_users = {'notalive'}
-c.Authenticator.allow_all = True
 c.NativeAuthenticator.minimum_password_length = 8
+c.Authenticator.admin_users = {"notalive"}
+c.Authenticator.allow_all = True
 
-# Сетевая связность
-c.JupyterHub.hub_connect_ip = 'jupyterhub'
-c.JupyterHub.hub_connect_port = 8081
+# Hub network
+c.JupyterHub.bind_url = "http://:8000"
+c.JupyterHub.hub_ip = "0.0.0.0"
+c.JupyterHub.hub_connect_ip = "jupyterhub"
 
-# Спавнер
+# Spawn Docker containers per user
 c.JupyterHub.spawner_class = dockerspawner.DockerSpawner
-c.DockerSpawner.image = 'jupyter-custom-gpu:latest'  # ← ваш кастомный образ
-c.DockerSpawner.network_name = 'jupyterhub-net'
+c.DockerSpawner.image = "jupyter-custom-gpu:latest"
+c.DockerSpawner.network_name = "jupyterhub-net"
+c.DockerSpawner.use_internal_ip = True
+c.DockerSpawner.remove = True
+c.DockerSpawner.debug = True
 
-# Volumes
-notebook_dir = '/home/jovyan/work'
-host_home = '/srv/jupyterhub/home'
-host_opt_packages = '/srv/jupyterhub/opt-packages'
+# Spawn user server with JupyterLab + terminal
+c.Spawner.default_url = "/lab"
+
+# Shared/isolated storage
+notebook_dir = "/home/jovyan/work"
+host_home = Path("/srv/jupyterhub/home")
+host_opt_packages = Path("/srv/jupyterhub/opt-packages")
 
 c.DockerSpawner.notebook_dir = notebook_dir
 c.DockerSpawner.volumes = {
-    f'{host_home}/{{username}}': notebook_dir,
-    host_opt_packages: '/opt/packages',
+    str(host_home / "{username}"): notebook_dir,
+    str(host_opt_packages): "/opt/packages",
 }
 
-# Pre-spawn hook для создания директорий
+# GPU enablement for user containers (requires nvidia-container-toolkit on host)
+c.DockerSpawner.extra_host_config = {
+    "device_requests": [DeviceRequest(count=-1, capabilities=[["gpu"]])],
+}
+
+# Runtime env for shared package directory
+c.Spawner.environment = {
+    "PYTHONPATH": "/opt/packages:${PYTHONPATH}",
+    "PIP_TARGET": "/opt/packages",
+    "PIP_DISABLE_PIP_VERSION_CHECK": "1",
+}
+
+
 def pre_spawn_hook(spawner):
     username = spawner.user.name
-    host_path = os.path.join(host_home, username)
-    if not os.path.exists(host_path):
-        os.makedirs(host_path, exist_ok=True)
-        spawner.log.info(f"✓ Created home directory: {host_path}")
-    try:
-        subprocess.check_call(['chown', '-R', '1000:100', host_path])
-        spawner.log.info(f"✓ Set ownership 1000:100 on {host_path}")
-    except Exception as e:
-        spawner.log.error(f"✗ Failed to set ownership on {host_path}: {e}")
+    user_home = host_home / username
+    user_home.mkdir(parents=True, exist_ok=True)
+
+    host_opt_packages.mkdir(parents=True, exist_ok=True)
+
+    # Ensure singleuser container user (uid=1000) can write to mounted folders.
+    os.chown(user_home, 1000, 1000)
+    os.chmod(user_home, 0o775)
+    os.chmod(host_opt_packages, 0o777)
+
 
 c.Spawner.pre_spawn_hook = pre_spawn_hook
 
-# Post-start для прав на /opt/packages
-c.DockerSpawner.post_start_cmd = """
-bash -c '
-  chown -R jovyan:jovyan /opt/packages 2>/dev/null || true
-  mkdir -p /opt/packages/lib/python3.10/site-packages
-  echo "✓ /opt/packages ready"
-'
-"""
-
-# Таймауты
-c.DockerSpawner.start_timeout = 300
-c.DockerSpawner.http_timeout = 120
-c.DockerSpawner.poll_interval = 1
-c.DockerSpawner.remove = True
-c.DockerSpawner.pull_policy = 'ifnotpresent'
-
-# Порт
-c.JupyterHub.bind_url = 'http://:8000'
+# Timeouts
+c.Spawner.start_timeout = 300
+c.Spawner.http_timeout = 120

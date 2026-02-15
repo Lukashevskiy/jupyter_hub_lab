@@ -1,12 +1,14 @@
 services:
   jupyterhub:
-    image: jupyterhub/jupyterhub:4.0  # ← ОФИЦИАЛЬНЫЙ ОБРАЗ ХАБА
+    build:
+      context: .
+      dockerfile: Dockerfile.hub
     container_name: jupyterhub
     ports:
       - "8000:8000"
     volumes:
       - ./jupyterhub_config.py:/srv/jupyterhub/jupyterhub_config.py:ro
-      - jupyterhub_/srv/jupyterhub
+      - jupyterhub_data:/srv/jupyterhub
       - /srv/jupyterhub/home:/srv/jupyterhub/home:rw
       - /srv/jupyterhub/opt-packages:/srv/jupyterhub/opt-packages:rw
       - /var/run/docker.sock:/var/run/docker.sock
@@ -22,4 +24,4 @@ networks:
     driver: bridge
 
 volumes:
-  jupyterhub_:
+  jupyterhub_data:
