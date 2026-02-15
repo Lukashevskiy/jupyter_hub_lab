@@ -27,6 +27,7 @@ c.DockerSpawner.network_name = "jupyterhub-net"
 c.DockerSpawner.use_internal_ip = True
 c.DockerSpawner.remove = True
 c.DockerSpawner.debug = True
+c.DockerSpawner.pull_policy = "never"
 
 # Spawn user server with JupyterLab + terminal
 c.Spawner.default_url = "/lab"
