@@ -34,6 +34,6 @@ RUN python3 -m pip install --no-cache-dir --upgrade pip setuptools wheel && \
 USER jovyan
 WORKDIR /home/jovyan/work
 
-ENV PYTHONPATH="/opt/packages:${PYTHONPATH}"
+ENV PYTHONPATH="/opt/packages"
 
 CMD ["jupyterhub-singleuser", "--ip=0.0.0.0", "--port=8888", "--ServerApp.default_url=/lab"]
