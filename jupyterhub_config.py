@@ -36,11 +36,13 @@ c.Spawner.default_url = "/lab"
 notebook_dir = "/home/jovyan/work"
 host_home = Path("/srv/jupyterhub/home")
 host_opt_packages = Path("/srv/jupyterhub/opt-packages")
+host_pip_cache = Path("/srv/jupyterhub/pip-cache")
 
 c.DockerSpawner.notebook_dir = notebook_dir
 c.DockerSpawner.volumes = {
     str(host_home / "{username}"): notebook_dir,
     str(host_opt_packages): "/opt/packages",
+    str(host_pip_cache): "/opt/pip-cache",
 }
 
 # GPU enablement for user containers (requires nvidia-container-toolkit on host)
@@ -52,6 +54,8 @@ c.DockerSpawner.extra_host_config = {
 c.Spawner.environment = {
     "PYTHONPATH": "/opt/packages:${PYTHONPATH}",
     "PIP_TARGET": "/opt/packages",
+    "PIP_CACHE_DIR": "/opt/pip-cache",
+    "PIP_NO_CACHE_DIR": "0",
     "PIP_DISABLE_PIP_VERSION_CHECK": "1",
 }
 
@@ -85,10 +89,12 @@ def pre_spawn_hook(spawner):
     user_home.mkdir(parents=True, exist_ok=True)
 
     host_opt_packages.mkdir(parents=True, exist_ok=True)
+    host_pip_cache.mkdir(parents=True, exist_ok=True)
 
     # Ensure singleuser container user (uid=1000) can write to mounted folders.
     _fix_tree_permissions(user_home, 1000, 1000, spawner.log)
     os.chmod(host_opt_packages, 0o777)
+    os.chmod(host_pip_cache, 0o777)
 
 
 c.Spawner.pre_spawn_hook = pre_spawn_hook
